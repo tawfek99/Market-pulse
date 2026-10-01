@@ -399,6 +399,15 @@ input[type="number"] {
   background: var(--bullish);
 }
 
+/* Demo build badge — amber, to distinguish the frozen snapshot from live data. */
+.live-badge.is-demo {
+  color: var(--accent);
+}
+
+.live-badge.is-demo .live-dot {
+  background: var(--accent);
+}
+
 .btn-icon {
   padding: 8px 11px;
   font-size: 1rem;

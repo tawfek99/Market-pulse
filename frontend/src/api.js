@@ -1,88 +1,35 @@
-// Thin API client. In dev, Vite proxies `/api` to the FastAPI backend.
-// In production (e.g. GitHub Pages), `VITE_API_URL` points at the deployed
-// FastAPI origin; a trailing slash is stripped so `${BASE}${path}` stays clean.
-const BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+// Single entry point for all data access. Picks one of two implementations:
+//
+//   - `VITE_DEMO=1`              -> self-contained demo (frozen snapshot)
+//   - `VITE_API_URL` set (prod)  -> live FastAPI backend
+//   - otherwise (dev)            -> live backend via the Vite `/api` proxy
+//
+// A production build with neither flag falls back to the demo so the GitHub
+// Pages site always works. The chosen module is imported lazily, so only its
+// code ships in (and loads with) the build.
+const DEMO =
+  import.meta.env.VITE_DEMO === "1" ||
+  (!import.meta.env.VITE_API_URL && import.meta.env.PROD);
 
-async function request(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, options);
-  if (!res.ok) {
-    let detail = "";
-    try {
-      const body = await res.json();
-      detail = body.detail ? `: ${body.detail}` : "";
-    } catch {
-      // ignore non-JSON error bodies
-    }
-    throw new Error(`Request failed (${res.status})${detail}`);
-  }
-  if (res.status === 204) return null;
-  return res.json();
-}
+export const IS_DEMO = DEMO;
 
-const json = (method, body) => ({
-  method,
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-});
+let implPromise;
+const impl = () =>
+  (implPromise ??= DEMO ? import("./api/demo") : import("./api/live"));
 
-export const fetchSentiment = (period = "1y") =>
-  request(`/api/sentiment?period=${period}`);
+const call = (name) => (...args) => impl().then((mod) => mod[name](...args));
 
-export const fetchHistory = (period = "1y") =>
-  request(`/api/sentiment/history?period=${period}`);
-
-export const fetchMarketSummary = () => request("/api/market/summary");
-
-export const fetchChart = (ticker, period = "6mo", interval = "1d") =>
-  request(
-    `/api/market/chart?ticker=${encodeURIComponent(ticker)}&period=${period}&interval=${interval}`
-  );
-
-export const searchTickers = (q, limit = 8) =>
-  request(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`);
-
-export const fetchTicker = (ticker, period = "1y", interval = "1d") =>
-  request(
-    `/api/ticker/${encodeURIComponent(ticker)}?period=${period}&interval=${interval}`
-  );
-
-export const fetchMovers = (limit = 5) =>
-  request(`/api/market/movers?limit=${limit}`);
-
-// ---------- Portfolio ----------
-
-export const fetchPortfolio = () => request("/api/portfolio");
-
-export const addHolding = (holding) =>
-  request("/api/portfolio", json("POST", holding));
-
-export const updateHolding = (id, patch) =>
-  request(`/api/portfolio/${id}`, json("PUT", patch));
-
-export const deleteHolding = (id) =>
-  request(`/api/portfolio/${id}`, { method: "DELETE" });
-
-// ---------- Screener ----------
-
-export const fetchScreener = (params = {}) => {
-  const qs = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") qs.set(key, value);
-  });
-  return request(`/api/screener?${qs.toString()}`);
-};
-
-// ---------- News sentiment ----------
-
-export const fetchNews = (scope = "market", limit = 8) =>
-  request(`/api/news/${encodeURIComponent(scope)}?limit=${limit}`);
-
-// ---------- Backtest ----------
-
-export const fetchBacktest = (params) => {
-  const qs = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") qs.set(key, value);
-  });
-  return request(`/api/backtest?${qs.toString()}`);
-};
+export const fetchSentiment = call("fetchSentiment");
+export const fetchHistory = call("fetchHistory");
+export const fetchMarketSummary = call("fetchMarketSummary");
+export const fetchChart = call("fetchChart");
+export const searchTickers = call("searchTickers");
+export const fetchTicker = call("fetchTicker");
+export const fetchMovers = call("fetchMovers");
+export const fetchPortfolio = call("fetchPortfolio");
+export const addHolding = call("addHolding");
+export const updateHolding = call("updateHolding");
+export const deleteHolding = call("deleteHolding");
+export const fetchScreener = call("fetchScreener");
+export const fetchNews = call("fetchNews");
+export const fetchBacktest = call("fetchBacktest");

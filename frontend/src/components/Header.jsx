@@ -1,4 +1,5 @@
 import SearchBar from "./SearchBar";
+import { IS_DEMO } from "../api";
 import { MoonIcon, PulseMark, RefreshIcon, SunIcon } from "./Icons";
 
 const NAV = [
@@ -37,9 +38,12 @@ export default function Header({ page, onNavigate, onSelectTicker, theme, onTogg
         </nav>
 
         <div className="header-right">
-          <span className="live-badge" title="Live market data">
+          <span
+            className={`live-badge${IS_DEMO ? " is-demo" : ""}`}
+            title={IS_DEMO ? "Demo build — frozen data snapshot, not live" : "Live market data"}
+          >
             <span className="live-dot" />
-            Live
+            {IS_DEMO ? "Demo" : "Live"}
           </span>
           <SearchBar onSelect={onSelectTicker} />
           <button

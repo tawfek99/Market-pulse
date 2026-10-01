@@ -145,26 +145,41 @@ npm run dev
 Open http://localhost:5173. The Vite dev server proxies `/api` requests to the
 backend, so the two run side by side with no CORS setup.
 
+To run the **self-contained demo** locally (no backend), build and preview it:
+
+```bash
+cd frontend
+npm run build      # production build defaults to the demo data layer
+npm run preview
+```
+
 > **Note:** the first request downloads live data for ~25 tickers, which can
 > take several seconds. Results are cached in memory for 30 minutes, so
 > subsequent requests are instant.
 
 ## Live demo & deployment
 
-The UI is a static React build, so it can be hosted on **GitHub Pages**; the
-FastAPI backend runs as a small free Python service. The full walkthrough is in
-[`DEPLOYMENT.md`](DEPLOYMENT.md).
+The showcase deploys as a **self-contained static site on GitHub Pages** — no
+backend, no cold starts, no API keys. It ships a real snapshot of the API
+responses and does the dynamic work in the browser: the screener and the
+SMA-crossover backtest genuinely compute client-side, and the portfolio
+persists per visitor in localStorage. A **Demo** badge in the header makes the
+snapshot explicit. See [`DEPLOYMENT.md`](DEPLOYMENT.md) for the full walkthrough.
 
 - **Frontend — GitHub Pages.** `.github/workflows/deploy-pages.yml` builds
   `frontend/` and publishes it on every push to `main`.
-- **Backend — Render (free tier).** [`render.yaml`](render.yaml) is a one-click
-  blueprint; `backend/Dockerfile` is provided for any other container host.
-- **Wiring.** The backend origin is set once as the `VITE_API_URL` repository
-  variable and baked into the build; `VITE_BASE` is derived automatically from
-  the Pages URL. Backend CORS is open, so the two hosts talk directly.
+- **Snapshot — `frontend/public/demo/`.** Captured from the live API by
+  `backend/capture_demo.py`; refresh and commit to update the numbers.
+- **Optional live mode.** Set the `VITE_API_URL` repository variable (and host
+  the FastAPI backend — see [`render.yaml`](render.yaml) / `backend/Dockerfile`)
+  to build against live data instead.
 
-> First request after the backend has been idle can take 30–60 s (free-tier
-> cold start); the UI's skeletons cover it.
+```bash
+# refresh the bundled demo snapshot
+cd backend && python capture_demo.py
+# build + preview the static demo locally
+cd ../frontend && npm run build && npm run preview
+```
 
 ## Notes
 

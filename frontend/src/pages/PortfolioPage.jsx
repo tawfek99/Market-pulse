@@ -6,7 +6,7 @@ export default function PortfolioPage({ refreshKey, onSelect }) {
     <>
       <PageHead
         title="Portfolio"
-        subtitle="Track holdings with live prices. Positions persist in SQLite on the backend."
+        subtitle="Track holdings with current prices and live P&L."
       />
       <section className="card">
         <Portfolio refreshKey={refreshKey} onSelect={onSelect} />

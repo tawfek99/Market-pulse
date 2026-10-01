@@ -1,155 +1,165 @@
 # Deploying Market Pulse
 
-This app has two parts that both need to run:
+There are two ways to run this app, and the deployed showcase uses the first:
 
-- **Frontend** (`frontend/`) — React + Vite. Static files, so it can live on
-  **GitHub Pages**.
-- **Backend** (`backend/`) — FastAPI + yfinance. A long-running Python service
-  that fetches live market data, so it **cannot** run on GitHub Pages. It needs
-  a normal web host.
+| Mode | Backend needed? | Data | Where it runs |
+| ---- | --------------- | ---- | ------------- |
+| **Demo build** (default) | **No** | Frozen snapshot, bundled | GitHub Pages |
+| **Live build** | Yes (FastAPI) | Live Yahoo Finance | Pages + a Python host |
 
-The setup below puts the UI on GitHub Pages and the API on a free host
-(Render), then wires them together. Estimated time: ~10 minutes.
-
-> **Why not Pages alone?** GitHub Pages only serves static files. The sentiment,
-> screener, backtest, portfolio, news and quote features all need the FastAPI
-> process, so a static-only deploy would show the shell but none of the live
-> functionality.
+The **demo build is the recommended showcase**: a single static site, no server,
+no cold starts, no API keys. The screener and backtest still genuinely compute
+in the browser, and the portfolio persists per visitor.
 
 ---
 
-## 1. Push the project to GitHub
+## 1. Deploy the demo to GitHub Pages
 
-The project is not a git repository yet. From the project root:
+That's it — there is no backend step.
+
+1. Push the project to GitHub (see §5 if it isn't a repo yet).
+2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+3. Push to `main`, or run **Actions → "Deploy frontend to GitHub Pages" →
+   Run workflow**.
+
+The site goes live at `https://<your-user>.github.io/<repo>/`.
+
+The workflow builds with `VITE_DEMO=1` when the `VITE_API_URL` repository
+variable is **not** set (the default), and derives the correct base path from
+the Pages URL automatically.
+
+> A project repo is served from a subpath (`/<repo>/`); a `<user>.github.io`
+> repo is served from `/`. Both are handled — you don't configure the base path.
+
+---
+
+## How the demo works
+
+The deployed site has no server. It ships a **real snapshot of the API
+responses** (`frontend/public/demo/`) and does the dynamic work client-side:
+
+- **Charts, quotes, news, sentiment** — read the frozen snapshot.
+- **Screener** — filtering and sorting run in the browser
+  (`frontend/src/demo/screener.js`), mirroring the backend rules.
+- **Backtest** — the SMA-crossover is recomputed in the browser
+  (`frontend/src/demo/backtest.js`), a port of `backend/app/backtest.py`.
+- **Portfolio** — add/edit/remove persist in **localStorage**, per visitor.
+
+The code chooses its data layer in `frontend/src/api.js`: `VITE_DEMO=1` uses the
+demo layer, otherwise it uses the live API in `frontend/src/api/live.js`.
+
+### Refreshing the snapshot
+
+Data is only as fresh as the last capture. To update it:
+
+```bash
+cd backend
+python capture_demo.py        # ~1 minute, writes frontend/public/demo/
+cd ..
+git add frontend/public/demo
+git commit -m "Refresh demo snapshot"
+git push
+```
+
+The header shows a **Demo** badge whenever the demo layer is active, so nobody
+mistakes the snapshot for live data.
+
+---
+
+## 2. Preview the demo build locally
+
+```bash
+cd frontend
+npm run build                 # defaults to the demo build in production mode
+npm run preview               # serves dist/ (usually http://localhost:4173/)
+```
+
+Run the automated smoke test of the demo layer against the preview server:
+
+```bash
+# in another terminal, after `npm run preview`
+node scripts/test-demo.mjs
+# or point it elsewhere: $env:DEMO_BASE="http://localhost:4173/" ; node scripts/test-demo.mjs
+```
+
+It exercises the real `src/api/demo.js` against the snapshot (36 checks:
+charts, screener filters/sorts, backtest math, portfolio CRUD).
+
+---
+
+## 3. (Optional) Live-data build
+
+If you'd rather show live prices, host the FastAPI backend and point the build
+at it. Everything else in the workflow stays the same.
+
+1. **Deploy the backend.** [`render.yaml`](../render.yaml) is a one-click Render
+   blueprint (`rootDir: backend`, `uvicorn app.main:app --host 0.0.0.0 --port
+   $PORT`). `backend/Dockerfile` works on any other container host (Railway,
+   Fly.io, Hugging Face Spaces, Cloud Run...).
+2. Confirm `https://<api-host>/api/health` returns
+   `{"status":"ok","service":"market-pulse"}`.
+3. **Settings → Secrets and variables → Actions → Variables → New repository
+   variable**: `VITE_API_URL` = `https://<api-host>` (no trailing slash, no
+   `/api`).
+4. Re-run the deploy workflow. With `VITE_API_URL` set, the workflow builds the
+   live layer instead of the demo.
+
+**Caveats of the live path** (why the demo is the default):
+
+- Render's free tier sleeps after ~15 min idle → 30–60 s cold starts.
+- Yahoo Finance rate-limits/blocks datacenter IPs → intermittent `502`s.
+- The portfolio SQLite file is ephemeral on free hosts → holdings reset.
+- The portfolio is public and unauthenticated → any visitor can edit it.
+
+---
+
+## 4. Local development (live, unchanged)
+
+```bash
+# terminal 1 — API on :8000
+cd backend
+python -m uvicorn app.main:app --port 8000 --log-level warning
+
+# terminal 2 — Vite dev server on :5173, proxies /api to the backend
+cd frontend
+npm run dev
+```
+
+In dev the demo layer is off, so you get the real API through the proxy.
+
+---
+
+## 5. Push the project to GitHub
+
+The project ships as a non-repo folder; initialise it once:
 
 ```bash
 git init
 git add .
 git commit -m "Market Pulse: full-stack sentiment dashboard"
 git branch -M main
-# Create an empty repo on GitHub named, say, "market-pulse", then:
+# create an empty repo on GitHub named, say, "market-pulse", then:
 git remote add origin https://github.com/<your-user>/market-pulse.git
 git push -u origin main
 ```
 
-The repo name matters: on a **project** Pages site the UI is served from
-`https://<your-user>.github.io/<repo>/`. The workflow detects this
-automatically (via `actions/configure-pages`), so you don't need to hardcode it.
-
 ---
 
-## 2. Deploy the backend (Render, free tier)
+## Why hash routing helps
 
-1. Sign in at <https://render.com> with GitHub.
-2. **New + → Blueprint**, select this repository. Render reads
-   [`render.yaml`](../render.yaml) and creates a `market-pulse-api` web service
-   (`rootDir: backend`, started with
-   `uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
-3. Wait for the first build, then copy the service URL — it looks like
-   `https://market-pulse-api.onrender.com`.
-4. Confirm it's alive: open `https://market-pulse-api.onrender.com/api/health`
-   → should return `{"status":"ok","service":"market-pulse"}`.
-
-**Alternatives to Render:** the `backend/Dockerfile` works on any container
-host — Railway, Fly.io, Hugging Face Spaces, Google Cloud Run, etc. Any of them
-is fine as long as the result is a public HTTPS origin that serves `/api/...`.
-
-> **Free-tier notes**
-> - Render's free web service spins down after ~15 min idle; the first request
->   afterwards can take 30–60 s (cold start). The UI's loading skeletons cover
->   this.
-> - Yahoo Finance sometimes rate-limits requests from cloud IPs. If many
->   endpoints start returning `502`, that's why — the in-memory cache (30 min)
->   usually smooths it over. Try another region/host if it persists.
-
----
-
-## 3. Point the frontend at the backend
-
-Back on GitHub: **Settings → Secrets and variables → Actions → Variables → New
-repository variable**
-
-| Name            | Value                                             |
-| --------------- | ------------------------------------------------- |
-| `VITE_API_URL`  | `https://market-pulse-api.onrender.com` (no trailing slash, no `/api`) |
-
-This is injected at build time. The client calls `${VITE_API_URL}/api/...`, and
-the backend already allows cross-origin requests (CORS `*`), so no extra config
-is needed.
-
-The deploy workflow **fails deliberately** if `VITE_API_URL` is unset — better
-than publishing a UI that silently calls `/api` on `github.io` and 404s.
-
----
-
-## 4. Enable GitHub Pages
-
-**Settings → Pages → Build and deployment → Source: GitHub Actions**.
-
-Then run the deploy: push to `main`, or go to **Actions → "Deploy frontend to
-GitHub Pages" → Run workflow**. When it's green, the site is live at:
-
-```
-https://<your-user>.github.io/<repo>/
-```
-
----
-
-## How the pieces fit
-
-```
-Browser  ──►  https://<user>.github.io/<repo>/        (static React build, Pages)
-   │
-   └──fetch──►  https://<api-host>/api/...             (FastAPI + yfinance)
-```
-
-| File                                  | Purpose                                                     |
-| ------------------------------------- | ----------------------------------------------------------- |
-| `.github/workflows/deploy-pages.yml`  | Builds `frontend/` and publishes it to Pages                |
-| `render.yaml`                         | Blueprint that deploys the FastAPI backend on Render        |
-| `backend/Dockerfile`                  | Container image for non-Render hosts                        |
-| `frontend/vite.config.js`             | Reads `VITE_BASE` so assets resolve under the Pages subpath |
-| `frontend/src/api.js`                 | Reads `VITE_API_URL` to reach the deployed backend          |
-
----
-
-## Local development (unchanged)
-
-The dev server still proxies `/api` to `localhost:8000`, so nothing here changes
-day-to-day:
-
-```bash
-# terminal 1
-cd backend && uvicorn app.main:app --reload --port 8000
-# terminal 2
-cd frontend && npm run dev
-```
-
-To preview a production build with a real backend locally:
-
-```bash
-cd frontend
-$env:VITE_API_URL = "http://localhost:8000"   # PowerShell
-npm run build && npm run preview
-```
-
----
-
-## Why hash routing helps here
-
-The app routes with URL hashes (`#/screener`, `#/ticker/AAPL`). Pages never sees
-those as separate paths, so deep links work on GitHub Pages **without** a
+Routes are URL hashes (`#/screener`, `#/ticker/AAPL`), so Pages never requests
+those as separate paths. Deep links work on GitHub Pages **without** a
 `404.html` SPA-fallback hack.
 
 ---
 
 ## Troubleshooting
 
-| Symptom                                  | Cause / fix                                                              |
-| ---------------------------------------- | ----------------------------------------------------------------------- |
-| Blank page, assets 404                   | Pages base path wrong. Re-run the workflow (it derives it automatically).|
-| UI loads, every panel shows a fetch error| `VITE_API_URL` missing/wrong, or backend asleep/offline.                 |
-| `502` from many endpoints                | Yahoo blocked/rate-limited the host IP; retry or move the backend host.  |
-| CORS error in the console                | Backend `allow_origins` changed from `*`; add the Pages origin back.      |
-| First load very slow                     | Free-host cold start — expected; subsequent loads use the cache.         |
-| Screener/backtest empty                  | Yahoo data hiccup — hit the refresh button in the header.                |
+| Symptom | Cause / fix |
+| ------- | ----------- |
+| Blank page, assets 404 | Pages base path wrong — re-run the workflow (it derives it). |
+| Header shows "Demo" but you wanted live | Set `VITE_API_URL` and re-run the workflow. |
+| Demo shows stale numbers | Re-run `backend/capture_demo.py` and push. |
+| Portfolio empty after switching browsers | Expected — localStorage is per browser/profile. |
+| Live build: 502s | Yahoo blocked the host IP; retry or move the host. |
+| Live build: slow first load | Free-host cold start; the demo build avoids this. |

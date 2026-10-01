@@ -38,18 +38,12 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
 
-      # Fail fast with a clear message instead of deploying a UI that calls /api
-      # on github.io (which 404s) when the variable is missing.
-      - name: Verify API URL is configured
-        if: ${{ vars.VITE_API_URL == '' }}
-        run: |
-          echo "::error::Repository variable VITE_API_URL is not set. Add it under Settings -> Secrets and variables -> Actions -> Variables, e.g. https://market-pulse-api.onrender.com"
-          exit 1
-
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
 
+      # No VITE_API_URL -> self-contained demo build (frozen snapshot, no backend).
+      # Set the VITE_API_URL repository variable to build against a live backend.
       - name: Build
         working-directory: frontend
         env:
@@ -57,6 +51,7 @@ jobs:
           # slash but may lack a trailing one, which the vite config normalises.
           VITE_BASE: ${{ steps.pages.outputs.base_path }}/
           VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_DEMO: ${{ vars.VITE_API_URL == '' && '1' || '' }}
         run: npm run build
 
       - name: Upload Pages artifact

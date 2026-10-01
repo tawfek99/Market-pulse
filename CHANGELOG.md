@@ -298,6 +298,48 @@ Made the app usable and interactive across phone / tablet / desktop.
 
 ---
 
+## Round 14 — Self-contained static demo build
+
+The showcase is now a **static site with no backend**. It bundles a real
+snapshot of the API responses and does the dynamic work in the browser, which
+removes every risk of the split deployment (cold starts, Yahoo rate limits,
+ephemeral SQLite, shared public portfolio).
+
+### Snapshot (`backend/capture_demo.py`)
+- Captures real responses from the live `app.*` modules into
+  `frontend/public/demo/` in ~45 s. One batched 10y daily download plus batched
+  1d/5d/1mo intraday downloads cover all 49 symbols. OHLC kept at 4 decimals so
+  the client-side backtest matches the server exactly.
+- Files: `sentiment.json`, `history.json` (6mo/1y/2y/5y), `summary.json`,
+  `movers.json`, `screener.json`, `news-market.json`, `news/{SYM}.json`,
+  `tickers/{SYM}.json`, `charts/{SYM}.json` (compact
+  `[date,o,h,l,c,v]` arrays), and an `index.json` manifest. ~9.8 MB, loaded
+  lazily per page/symbol.
+
+### Data layer
+- `frontend/src/api.js` is now a selector: `VITE_DEMO=1` (or a production build
+  with no `VITE_API_URL`) loads `api/demo.js`; otherwise `api/live.js`. The
+  chosen module is imported lazily, so only its code ships in the build.
+- `frontend/src/demo/` — `load.js` (snapshot fetch, slug, period slicing),
+  `screener.js` (client-side filter/sort), `backtest.js` (SMA-crossover port of
+  `backtest.py`), `indicators.js`, `portfolio.js` (localStorage CRUD).
+- Verified with `node scripts/test-demo.mjs`, which runs the real demo layer
+  against a preview build (36 checks). The client backtest reproduces
+  `backend/app/backtest.py` exactly on the snapshot (AAPL 20/50 5y: +17.6%
+  strategy, +137.41% buy & hold, Sharpe 0.27, 17 trades, 41.18% win rate).
+
+### UI
+- The header badge shows **Demo** (amber) when the demo layer is active, with a
+  tooltip that the data is a frozen snapshot.
+- Portfolio subtitle no longer claims backend SQLite persistence.
+
+### Deploy
+- The Pages workflow builds the demo by default (no `VITE_API_URL` required) and
+  only builds the live layer when the `VITE_API_URL` repository variable is set;
+  the hard-fail on a missing variable is gone.
+- Added `DEPLOYMENT.md` (demo-first), `.gitattributes` (LF), and an npm
+  `test:demo` script.
+
 ## API reference (current)
 
 | Method | Path                      | Notes                                    |
@@ -332,6 +374,10 @@ Made the app usable and interactive across phone / tablet / desktop.
 - Session screenshots could not be visually verified by the model (no image
   input in this environment) — visual changes were verified by build + API
   tests and user feedback.
+- The deployed demo shows a fixed data snapshot (refresh with
+  `backend/capture_demo.py`); only the order of magnitude is current.
+- Demo portfolio data is per-browser (localStorage) — it does not sync across
+  devices or browsers.
 
 ## Roadmap (candidates, not started)
 
