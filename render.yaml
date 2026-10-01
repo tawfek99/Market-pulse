@@ -1,0 +1,19 @@
+# Render Blueprint — one-click deploy of the Market Pulse API.
+#
+# In the Render dashboard: New + -> Blueprint -> point at this repository.
+# Render reads this file, creates the web service below, and gives you a public
+# URL like https://market-pulse-api.onrender.com. Put that URL into the
+# VITE_API_URL repository variable on GitHub (see DEPLOYMENT.md).
+services:
+  - type: web
+    name: market-pulse-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
