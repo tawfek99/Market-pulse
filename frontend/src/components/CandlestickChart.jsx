@@ -101,7 +101,8 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
   };
   const scheduleHide = () => {
     clearHide();
-    hideTimer.current = setTimeout(() => setHover(null), 1000);
+    // Brief pause so the value is readable, then dismiss quickly.
+    hideTimer.current = setTimeout(() => setHover(null), 400);
   };
 
   const n = data.length;

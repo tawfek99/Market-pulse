@@ -435,8 +435,8 @@ the charts were fiddly on touch.
 - The header is now **opaque** (`var(--bg)`, no `backdrop-filter`) at every
   size. The previous frosted translucency let page content show through while
   scrolling, which read as the header overlapping the content.
-- The chart tooltip **auto-hides ~1s after the finger is lifted** on touch; a new
-  touch or drag cancels the pending hide.
+- The chart tooltip **auto-hides ~0.4s after the finger is lifted** on touch; a
+  new touch or drag cancels the pending hide.
 
 ### Verification
 - `npm run build` passes (default demo build). Not machine-verified visually —
