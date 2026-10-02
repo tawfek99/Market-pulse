@@ -395,11 +395,13 @@ the charts were fiddly on touch.
 
 ### Shrinking header
 - `hooks/useMediaQuery.js` — reactive `window.matchMedia`.
-- `components/Header.jsx` — on phones (`≤640px`) the header collapses into a
-  single slim row once the page is scrolled, and expands again at the top, via a
-  throttled passive scroll listener with hysteresis (expand < 12px, condense
-  > 44px). The condensed bar keeps the brand mark, a swipeable nav and icon
-  buttons; the title, tagline, Demo/Live badge and the "Refresh" label hide.
+- `components/Header.jsx` — on phones (`≤640px`) the header condenses once the
+  page is scrolled down and expands when the user scrolls up, driven by a
+  throttled, passive, **direction-based** scroll listener with a small deadband.
+  Condensing collapses the nav row (animated via `max-height`) and hides the
+  title, tagline, Demo/Live badge and the "Refresh" label; the brand mark, a
+  swipeable nav and the icon buttons (search / theme / refresh) remain. The
+  phone header is two rows (brand + controls, then nav) instead of three.
 - `components/SearchBar.jsx` — new `collapsed` mode: an icon button that expands
   into a full-width overlay search field below the header (submitting, Escape or
   tapping outside collapses it).
@@ -413,6 +415,11 @@ the charts were fiddly on touch.
   - **Bigger range-navigator handles** plus a larger (20px) grab zone on touch.
   - **Tooltip docks top-left** on touch so a finger can't cover it, and is
     hidden while pinching.
+  - **Tooltip auto-hides ~0.4s after the finger is lifted** on touch — reliable
+    even when the thumb leaves the plot: the pointer is captured on touch-down,
+    a `window` `pointerup`/`pointercancel` fallback schedules the hide, and the
+    synthetic mouse events mobile browsers emit after a tap are ignored for
+    800ms so they can't re-show it.
   - Touch-specific hint text ("Pinch or +/− to zoom…").
 - `styles.css` — the chart toolbar scrolls horizontally on phones with larger
   tap targets; the hint realigns to the left.
@@ -435,8 +442,6 @@ the charts were fiddly on touch.
 - The header is now **opaque** (`var(--bg)`, no `backdrop-filter`) at every
   size. The previous frosted translucency let page content show through while
   scrolling, which read as the header overlapping the content.
-- The chart tooltip **auto-hides ~0.4s after the finger is lifted** on touch; a
-  new touch or drag cancels the pending hide.
 
 ### Verification
 - `npm run build` passes (default demo build). Not machine-verified visually —
