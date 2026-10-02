@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatLarge, formatPrice, formatShortDate } from "../utils";
+import useMediaQuery from "../hooks/useMediaQuery";
 
 const OVERLAY_COLORS = {
   sma20: "var(--chart-sma20)",
@@ -72,12 +73,20 @@ function timeLabel(dateStr) {
 export default function CandlestickChart({ data, height = 420, defaultOverlays }) {
   const containerRef = useRef(null);
   const width = useWidth(containerRef);
+  const isNarrow = useMediaQuery("(max-width: 640px)");
+  // Shorter chart on phones so it doesn't dominate the screen, and a tighter
+  // left gutter so the candles get more horizontal room.
+  const chartHeight = isNarrow ? Math.min(height, 340) : height;
+  const padLeft = isNarrow ? 44 : PAD_LEFT;
   const [hover, setHover] = useState(null);
   const [overlays, setOverlays] = useState(
     defaultOverlays ?? { sma20: true, sma50: true, bollinger: false }
   );
   const [view, setView] = useState(null); // { s, e } fractional bar coords; null = full
   const [dragging, setDragging] = useState(null);
+  // Active pointers (for pinch-to-zoom) and the pinch baseline.
+  const pointers = useRef(new Map());
+  const pinch = useRef(null);
 
   const n = data.length;
   const minWin = Math.max(3, Math.min(10, n - 1));
@@ -124,28 +133,28 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     const onWheel = (e) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
-      const plotW = rect.width - PAD_LEFT - PAD_RIGHT;
+      const plotW = rect.width - padLeft - PAD_RIGHT;
       if (plotW <= 0) return;
-      const f = Math.max(0, Math.min(1, (e.clientX - rect.left - PAD_LEFT) / plotW));
+      const f = Math.max(0, Math.min(1, (e.clientX - rect.left - padLeft) / plotW));
       zoomAt(f, e.deltaY > 0 ? 1.2 : 1 / 1.2);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, n, minWin]);
+  }, [width, n, minWin, padLeft]);
 
   const geo = useMemo(() => {
     if (!width || !n) return null;
 
-    const padTop = 12;
+    const padTop = isNarrow ? 10 : 12;
     const padBottom = 24;
-    const volHeight = 64;
-    const volGap = 8;
-    const navGap = 12;
-    const navH = 52;
+    const volHeight = isNarrow ? 46 : 64;
+    const volGap = isNarrow ? 6 : 8;
+    const navGap = isNarrow ? 10 : 12;
+    const navH = isNarrow ? 46 : 52;
 
     const priceTop = padTop;
-    const priceBottom = height - padBottom - navH - navGap - volHeight - volGap;
+    const priceBottom = chartHeight - padBottom - navH - navGap - volHeight - volGap;
     const volTop = priceBottom + volGap;
     const volBottom = volTop + volHeight;
     const navTop = volBottom + navGap;
@@ -184,13 +193,13 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     minP -= padP;
     maxP += padP;
 
-    const plotW = width - PAD_LEFT - PAD_RIGHT;
+    const plotW = width - padLeft - PAD_RIGHT;
     const count = i1 - i0 + 1;
 
     // Raw per-row scale: one x-position per data row. Used for the crosshair,
     // the overlay lines, date ticks and hover hit-testing.
     const step = plotW / count;
-    const x = (i) => PAD_LEFT + (i - i0 + 0.5) * step;
+    const x = (i) => padLeft + (i - i0 + 0.5) * step;
 
     // Aggregate rows into buckets whenever a single row would be thinner than
     // ~2px. A long range (Max can exceed 11,000 daily rows) otherwise draws
@@ -223,7 +232,7 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     const barCount = bars.length;
     const barStep = plotW / barCount;
     const candleW = Math.max(1, Math.min(barStep * 0.62, 14));
-    const barX = (bi) => PAD_LEFT + (bi + 0.5) * barStep;
+    const barX = (bi) => padLeft + (bi + 0.5) * barStep;
 
     let volMax = 1;
     for (const b of bars) if (b.volume > volMax) volMax = b.volume;
@@ -233,8 +242,8 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
 
     return {
       width,
-      height,
-      padLeft: PAD_LEFT,
+      height: chartHeight,
+      padLeft,
       padRight: PAD_RIGHT,
       priceTop,
       priceBottom,
@@ -256,7 +265,7 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
       volY,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, data, series, overlays, i0, i1]);
+  }, [width, chartHeight, isNarrow, padLeft, data, series, overlays, i0, i1]);
 
   const gridLevels = useMemo(() => {
     if (!geo) return [];
@@ -370,7 +379,7 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
   if (!geo) {
     return (
       <div className="candle-wrap">
-        <div ref={containerRef} style={{ height }} />
+        <div ref={containerRef} style={{ height: chartHeight }} />
       </div>
     );
   }
@@ -391,10 +400,21 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     setHoverAt(e.clientX, e.currentTarget);
   };
 
-  // ---------- main chart: tap/hover for the tooltip, drag to pan (when zoomed) ----------
+  // ---------- main chart: tap/hover for the tooltip, drag to pan (when
+  // zoomed), pinch to zoom ----------
   const onPointerDown = (e) => {
+    pointers.current.set(e.pointerId, e.clientX);
     // Touch has no hover: show the tooltip on tap.
     if (e.pointerType !== "mouse") setHoverAt(e.clientX, e.currentTarget);
+
+    // A second finger switches from pan/tap into pinch-to-zoom.
+    if (pointers.current.size === 2) {
+      const xs = [...pointers.current.values()];
+      pinch.current = { dist: Math.abs(xs[0] - xs[1]), view: view ?? { s: 0, e: n } };
+      setHover(null);
+      setDragging(null);
+      return;
+    }
     if (!view) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     setDragging({
@@ -407,6 +427,30 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
   };
 
   const onChartPointerMove = (e) => {
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, e.clientX);
+
+    // Pinch: scale the baseline span about the midpoint between the fingers.
+    if (pinch.current && pointers.current.size >= 2) {
+      const xs = [...pointers.current.values()];
+      const dist = Math.abs(xs[0] - xs[1]);
+      if (pinch.current.dist > 0 && dist > 0) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const mid = (xs[0] + xs[1]) / 2 - rect.left;
+        const f = Math.max(0, Math.min(1, (mid - geo.padLeft) / geo.plotW));
+        const base = pinch.current.view;
+        const baseSpan = base.e - base.s;
+        let newSpan = baseSpan * (pinch.current.dist / dist);
+        newSpan = Math.max(minWin, Math.min(n, newSpan));
+        if (newSpan >= n * 0.999) {
+          setView(null);
+        } else {
+          const s = Math.max(0, Math.min(n - newSpan, base.s + (baseSpan - newSpan) * f));
+          setView({ s, e: s + newSpan });
+        }
+      }
+      return;
+    }
+
     if (e.pointerType !== "mouse" && (!dragging || dragging.area !== "chart")) {
       setHoverAt(e.clientX, e.currentTarget);
       return;
@@ -424,13 +468,16 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     xs: geo.padLeft + (vs / n) * geo.plotW,
     xe: geo.padLeft + (ve / n) * geo.plotW,
   };
+  // Wider handles and a more forgiving grab zone on touch screens.
+  const handleW = isNarrow ? 12 : 6;
+  const nearPx = isNarrow ? 20 : 8;
 
   const onNavPointerDown = (e) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - rect.left;
     const span = ve - vs;
-    const near = (a, b) => Math.abs(a - b) <= 8;
+    const near = (a, b) => Math.abs(a - b) <= nearPx;
 
     if (near(px, navWindow.xs)) {
       setDragging({ area: "nav", mode: "resize-l", startClientX: e.clientX, startS: vs, startE: ve });
@@ -466,7 +513,11 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     }
   };
 
-  const onPointerUp = () => setDragging(null);
+  const onPointerUp = (e) => {
+    if (e?.pointerId != null) pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    setDragging(null);
+  };
 
   const last = data[i1];
   const hovered = hover != null ? data[hover] : null;
@@ -511,7 +562,7 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
         )}
       </div>
 
-      <div ref={containerRef} style={{ height, cursor: dragging ? "grabbing" : "crosshair" }}>
+      <div ref={containerRef} style={{ height: chartHeight, cursor: dragging ? "grabbing" : "crosshair" }}>
         <svg
           width={geo.width}
           height={geo.height}
@@ -616,7 +667,7 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
           ))}
 
           {/* hover crosshair */}
-          {hover != null && !dragging && (
+          {hover != null && !dragging && !pinch.current && (
             <line
               x1={geo.x(hover)}
               x2={geo.x(hover)}
@@ -654,21 +705,21 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
             strokeWidth="1"
           />
           <rect
-            x={navWindow.xs - 3}
+            x={navWindow.xs - handleW / 2}
             y={geo.navTop}
-            width={6}
+            width={handleW}
             height={geo.navBottom - geo.navTop}
             fill="var(--accent)"
-            rx={3}
+            rx={handleW / 2}
             opacity={0.9}
           />
           <rect
-            x={navWindow.xe - 3}
+            x={navWindow.xe - handleW / 2}
             y={geo.navTop}
-            width={6}
+            width={handleW}
             height={geo.navBottom - geo.navTop}
             fill="var(--accent)"
-            rx={3}
+            rx={handleW / 2}
             opacity={0.9}
           />
           {/* interaction surface for the navigator (topmost in this area) */}
@@ -685,11 +736,12 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
           />
         </svg>
 
-        {hovered && !dragging && (
+        {hovered && !dragging && !pinch.current && (
           <div
             className="candle-tooltip"
             style={{
-              left: Math.min(geo.width - 170, Math.max(4, geo.x(hover) + 14)),
+              // On touch, dock the tooltip top-left so a finger can't cover it.
+              left: isNarrow ? 8 : Math.min(geo.width - 170, Math.max(4, geo.x(hover) + 14)),
               top: 8,
             }}
           >
@@ -725,7 +777,9 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
       </div>
 
       <p className="chart-hint muted">
-        Scroll to zoom · drag to pan · double-click to reset
+        {isNarrow
+          ? "Pinch or +/− to zoom · drag to pan · double-tap to reset"
+          : "Scroll to zoom · drag to pan · double-click to reset"}
       </p>
     </div>
   );

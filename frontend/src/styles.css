@@ -2327,6 +2327,126 @@ a,
   }
 }
 
+/* =====================================================================
+   Mobile header condensation + touch chart controls
+   ===================================================================== */
+
+@media (max-width: 640px) {
+  /* Once scrolled, the header collapses into a single slim row. */
+  .header--condensed .header-inner {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
+  .header--condensed .brand-text,
+  .header--condensed .live-badge,
+  .header--condensed .btn-label {
+    display: none;
+  }
+
+  .header--condensed .brand {
+    gap: 0;
+  }
+
+  .header--condensed .nav {
+    order: 0;
+    flex: 1 1 auto;
+    flex-basis: auto;
+    width: auto;
+    min-width: 0;
+    margin: 0 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .header--condensed .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .header--condensed .nav-link {
+    padding: 6px 9px;
+    font-size: 0.68rem;
+  }
+
+  .header--condensed .header-right {
+    margin-left: 0;
+    width: auto;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .header--condensed .btn,
+  .header--condensed .btn-icon {
+    min-height: 34px;
+  }
+
+  .header--condensed .btn-icon {
+    padding: 6px 9px;
+  }
+
+  /* The expanded search drops below the slim header as a full-width overlay. */
+  .search--overlay {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    padding-top: 8px;
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    padding-left: max(14px, env(safe-area-inset-left));
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+  }
+
+  .search--overlay .search-input-wrap,
+  .search--overlay .search-input,
+  .search--overlay .search-input:focus {
+    width: 100%;
+  }
+
+  .search--overlay .search-results {
+    left: 14px;
+    right: 14px;
+    width: auto;
+  }
+
+  /* Chart toolbar scrolls instead of wrapping, with comfortable targets. */
+  .overlay-toggles {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+
+  .overlay-toggles::-webkit-scrollbar {
+    display: none;
+  }
+
+  .overlay-toggle {
+    min-height: 32px;
+    padding: 6px 11px;
+    font-size: 0.76rem;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  .chart-zoom {
+    margin-right: 6px;
+  }
+
+  .chart-hint {
+    font-size: 0.72rem;
+    text-align: left;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

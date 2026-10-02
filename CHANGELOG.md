@@ -340,6 +340,87 @@ ephemeral SQLite, shared public portfolio).
 - Added `DEPLOYMENT.md` (demo-first), `.gitattributes` (LF), and an npm
   `test:demo` script.
 
+## Round 15 — Deployed to GitHub Pages
+
+The project went live as a fully static site — no backend, no hosting account,
+no secrets. This round covers the deployment scaffolding and the actual go-live;
+the demo build itself is Round 14.
+
+### Deploy scaffolding
+- `.github/workflows/deploy-pages.yml` — builds `frontend/` and publishes it with
+  the official Pages actions (`configure-pages` / `upload-pages-artifact` /
+  `deploy-pages`). The site base path is taken from the Pages URL, so project
+  subpaths (`/<repo>/`) and user sites (`/`) both work with no configuration.
+- `frontend/vite.config.js` — `base` is now configurable via `VITE_BASE`
+  (normalised to a leading and trailing slash) so hashed assets resolve under the
+  Pages subpath.
+- `frontend/index.html` — favicon switched to `%BASE_URL%favicon.svg` so it
+  survives the subpath.
+- `frontend/src/api.js` — `VITE_API_URL` support with the trailing slash stripped
+  (the base origin the deployed client calls).
+- `README.md` — added a screenshots gallery and a "Live demo & deployment"
+  section.
+- `DEPLOYMENT.md` — added (later rewritten demo-first in Round 14).
+- `render.yaml`, `backend/Dockerfile`, `backend/.dockerignore` — an optional
+  live-backend path (Render blueprint + portable container image), retained but
+  not used by the static demo.
+- Initialised Git and made the first commit.
+
+### Go live
+- Created `github.com/tawfek99/Market-pulse` and pushed `main`.
+- Enabled GitHub Pages with **Source: GitHub Actions**; the workflow rebuilds and
+  redeploys the demo on every push to `main`.
+- Live at **https://tawfek99.github.io/Market-pulse/**.
+
+### Fixes
+- **Branch mismatch.** The local branch was `master` while the workflow watched
+  `main`; renamed with `git branch -M main` before the first push.
+- **Wrong GitHub account.** The first push failed with
+  `403 Permission to tawfek99/Market-pulse.git denied to tawfiqkhalil2909-create`
+  because Windows had cached credentials for a different account. Signing the
+  browser into `tawfek99` and removing the saved `git:https://github.com`
+  credential fixed it; the push then succeeded (`main -> main`).
+
+### Notes
+- The site updates on any push to `main` (about 2-3 min). Refresh the market data
+  by re-running `backend/capture_demo.py` and pushing `frontend/public/demo/`.
+- Commits are authored as the placeholder `Market Pulse
+  <market-pulse@example.com>` until `git config user.name` / `user.email` are set
+  locally.
+
+## Round 16 — Mobile header & chart usability
+
+Follow-up to phone feedback: the header took too much space while scrolling and
+the charts were fiddly on touch.
+
+### Shrinking header
+- `hooks/useMediaQuery.js` — reactive `window.matchMedia`.
+- `components/Header.jsx` — on phones (`≤640px`) the header collapses into a
+  single slim row once the page is scrolled, and expands again at the top, via a
+  throttled passive scroll listener with hysteresis (expand < 12px, condense
+  > 44px). The condensed bar keeps the brand mark, a swipeable nav and icon
+  buttons; the title, tagline, Demo/Live badge and the "Refresh" label hide.
+- `components/SearchBar.jsx` — new `collapsed` mode: an icon button that expands
+  into a full-width overlay search field below the header (submitting, Escape or
+  tapping outside collapses it).
+- `styles.css` — condensed-header rules, overlay-search styling.
+
+### Chart usability (touch)
+- `components/CandlestickChart.jsx`:
+  - **Pinch-to-zoom** (two-pointer gesture) in addition to wheel / +− buttons.
+  - **Responsive height** (~340px on phones) and a tighter left gutter so the
+    candles get more horizontal room.
+  - **Bigger range-navigator handles** plus a larger (20px) grab zone on touch.
+  - **Tooltip docks top-left** on touch so a finger can't cover it, and is
+    hidden while pinching.
+  - Touch-specific hint text ("Pinch or +/− to zoom…").
+- `styles.css` — the chart toolbar scrolls horizontally on phones with larger
+  tap targets; the hint realigns to the left.
+
+### Verification
+- `npm run build` passes (default demo build). Not machine-verified visually —
+  no browser input in this environment — so it is confirmed on a real phone.
+
 ## API reference (current)
 
 | Method | Path                      | Notes                                    |
@@ -382,7 +463,9 @@ ephemeral SQLite, shared public portfolio).
 ## Roadmap (candidates, not started)
 
 - pytest suite for sentiment math, screener, backtest, portfolio CRUD
-- Docker + live deployment (Render/Railway/Fly)
+- Live-data deployment on Render/Railway/Fly — the static demo already ships on
+  GitHub Pages (Round 15); `render.yaml` + `backend/Dockerfile` cover the
+  optional live path
 - Ticker comparison page
 - Price/RSI alerts with browser notifications
 - CSV export for screener/backtest results
