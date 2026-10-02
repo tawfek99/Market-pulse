@@ -287,8 +287,9 @@ input[type="number"] {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--header-bg);
-  backdrop-filter: blur(10px);
+  /* Opaque, not frosted: a translucent sticky header lets the page show through
+     while scrolling, which reads as the content "overlapping" it. */
+  background: var(--bg);
   border-top: 2px solid var(--accent);
   border-bottom: 1px solid var(--border);
 }
@@ -2352,13 +2353,6 @@ a,
    ===================================================================== */
 
 @media (max-width: 640px) {
-  /* Perf: an opaque, un-blurred header. `backdrop-filter` repaints every frame
-     while scrolling and is the biggest source of mobile scroll jank. */
-  .header {
-    background: var(--surface);
-    backdrop-filter: none;
-  }
-
   /* Once scrolled, collapse the nav row (animated) and tighten the padding. */
   .header--condensed .header-inner {
     row-gap: 0;
@@ -2399,7 +2393,7 @@ a,
     padding-right: max(14px, env(safe-area-inset-right));
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
     padding-left: max(14px, env(safe-area-inset-left));
-    background: var(--surface);
+    background: var(--bg);
     border-bottom: 1px solid var(--border);
   }
 

@@ -84,9 +84,11 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
   );
   const [view, setView] = useState(null); // { s, e } fractional bar coords; null = full
   const [dragging, setDragging] = useState(null);
-  // Active pointers (for pinch-to-zoom) and the pinch baseline.
+  // Active pointers (for pinch-to-zoom), the pinch baseline, and the pending
+  // tooltip auto-hide timer.
   const pointers = useRef(new Map());
   const pinch = useRef(null);
+  const hideTimer = useRef(null);
 
   const n = data.length;
   const minWin = Math.max(3, Math.min(10, n - 1));
@@ -97,6 +99,14 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     setHover(null);
     setDragging(null);
   }, [data]);
+
+  // Clear any pending tooltip auto-hide timer on unmount.
+  useEffect(
+    () => () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    },
+    []
+  );
 
   const vs = view ? view.s : 0;
   const ve = view ? view.e : n;
@@ -395,6 +405,19 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     setHover((prev) => (prev === i ? prev : i));
   };
 
+  // Touch has no "leave" event, so hide the tooltip a moment after the finger
+  // is lifted (a new touch or drag cancels the pending hide).
+  const clearHide = () => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  };
+  const scheduleHide = () => {
+    clearHide();
+    hideTimer.current = setTimeout(() => setHover(null), 1000);
+  };
+
   const onMove = (e) => {
     if (dragging) return;
     setHoverAt(e.clientX, e.currentTarget);
@@ -405,7 +428,10 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
   const onPointerDown = (e) => {
     pointers.current.set(e.pointerId, e.clientX);
     // Touch has no hover: show the tooltip on tap.
-    if (e.pointerType !== "mouse") setHoverAt(e.clientX, e.currentTarget);
+    if (e.pointerType !== "mouse") {
+      clearHide();
+      setHoverAt(e.clientX, e.currentTarget);
+    }
 
     // A second finger switches from pan/tap into pinch-to-zoom.
     if (pointers.current.size === 2) {
@@ -452,6 +478,7 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     }
 
     if (e.pointerType !== "mouse" && (!dragging || dragging.area !== "chart")) {
+      clearHide();
       setHoverAt(e.clientX, e.currentTarget);
       return;
     }
@@ -517,6 +544,8 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     if (e?.pointerId != null) pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinch.current = null;
     setDragging(null);
+    // Fade the tooltip away shortly after the finger is lifted.
+    if (e?.pointerType && e.pointerType !== "mouse") scheduleHide();
   };
 
   const last = data[i1];
