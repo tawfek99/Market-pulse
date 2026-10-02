@@ -89,6 +89,20 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
   const pointers = useRef(new Map());
   const pinch = useRef(null);
   const hideTimer = useRef(null);
+  const lastTouchAt = useRef(0);
+
+  // Touch has no "leave" event, so hide the tooltip a moment after the finger is
+  // lifted. A new touch or drag cancels the pending hide.
+  const clearHide = () => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  };
+  const scheduleHide = () => {
+    clearHide();
+    hideTimer.current = setTimeout(() => setHover(null), 1000);
+  };
 
   const n = data.length;
   const minWin = Math.max(3, Math.min(10, n - 1));
@@ -107,6 +121,28 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     },
     []
   );
+
+  // Fallback: if a touch ends outside the plot, or the browser cancels the
+  // gesture, still dismiss the tooltip shortly after release.
+  useEffect(() => {
+    const onUpAnywhere = (e) => {
+      if (e.pointerType === "mouse") return;
+      lastTouchAt.current = Date.now();
+      const had = pointers.current.delete(e.pointerId);
+      if (pointers.current.size < 2) pinch.current = null;
+      if (had) {
+        setDragging(null);
+        scheduleHide();
+      }
+    };
+    window.addEventListener("pointerup", onUpAnywhere);
+    window.addEventListener("pointercancel", onUpAnywhere);
+    return () => {
+      window.removeEventListener("pointerup", onUpAnywhere);
+      window.removeEventListener("pointercancel", onUpAnywhere);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const vs = view ? view.s : 0;
   const ve = view ? view.e : n;
@@ -405,21 +441,10 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     setHover((prev) => (prev === i ? prev : i));
   };
 
-  // Touch has no "leave" event, so hide the tooltip a moment after the finger
-  // is lifted (a new touch or drag cancels the pending hide).
-  const clearHide = () => {
-    if (hideTimer.current) {
-      clearTimeout(hideTimer.current);
-      hideTimer.current = null;
-    }
-  };
-  const scheduleHide = () => {
-    clearHide();
-    hideTimer.current = setTimeout(() => setHover(null), 1000);
-  };
-
   const onMove = (e) => {
-    if (dragging) return;
+    // Ignore the synthetic mouse events mobile browsers emit after a tap, which
+    // would otherwise immediately re-show the tooltip we just hid.
+    if (dragging || Date.now() - lastTouchAt.current < 800) return;
     setHoverAt(e.clientX, e.currentTarget);
   };
 
@@ -429,8 +454,15 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
     pointers.current.set(e.pointerId, e.clientX);
     // Touch has no hover: show the tooltip on tap.
     if (e.pointerType !== "mouse") {
+      lastTouchAt.current = Date.now();
       clearHide();
       setHoverAt(e.clientX, e.currentTarget);
+      // Capture so we still receive pointerup even if the finger leaves the plot.
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // capture is best-effort
+      }
     }
 
     // A second finger switches from pan/tap into pinch-to-zoom.
@@ -442,7 +474,11 @@ export default function CandlestickChart({ data, height = 420, defaultOverlays }
       return;
     }
     if (!view) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // capture is best-effort
+    }
     setDragging({
       area: "chart",
       startClientX: e.clientX,
