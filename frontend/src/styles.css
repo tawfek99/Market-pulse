@@ -132,6 +132,15 @@ html,
 body {
   margin: 0;
   padding: 0;
+  max-width: 100%;
+  /* Never scroll the page sideways: chart pan/pinch gestures must not drag the
+     whole page. `clip` (not `hidden`) keeps `position: sticky` working because
+     it does not create a scroll container. */
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+  /* Stop the browser re-anchoring scroll when the sticky header changes height,
+     which otherwise fights the condense/expand toggle and causes flicker. */
+  overflow-anchor: none;
 }
 
 body {
@@ -291,6 +300,7 @@ input[type="number"] {
   flex-wrap: wrap;
   padding-top: 14px;
   padding-bottom: 14px;
+  transition: padding 0.2s ease;
 }
 
 .brand {
@@ -1321,6 +1331,10 @@ main.container {
 .candle-wrap {
   position: relative;
   width: 100%;
+  /* Vertical page scroll still works over the chart, but horizontal drags and
+     pinch are ours to handle — and never chain into a page scroll. */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
 }
 
 .candle-wrap svg {
@@ -2146,6 +2160,10 @@ main.container {
     flex-basis: 100%;
     margin: 4px 0 0;
     overflow-x: auto;
+    overflow-y: hidden;
+    /* Animated collapse target for the condensed phone header. */
+    max-height: 60px;
+    transition: max-height 0.22s ease, margin-top 0.22s ease, opacity 0.18s ease;
   }
 
   .header-right {
@@ -2154,20 +2172,22 @@ main.container {
 }
 
 @media (max-width: 560px) {
+  /* Phones keep the same two-row header as tablets (brand + controls, then the
+     nav) instead of stacking into a tall column. */
   .header-inner {
-    flex-direction: column;
-    align-items: stretch;
-    flex-wrap: nowrap;
+    gap: 10px;
   }
 
-  .header-right {
-    flex-wrap: wrap;
-    margin-left: 0;
-    width: 100%;
+  .brand {
+    gap: 10px;
   }
 
-  .nav {
-    width: 100%;
+  .brand-title {
+    font-size: 0.95rem;
+  }
+
+  .tagline {
+    display: none;
   }
 
   .live-badge {
@@ -2332,12 +2352,16 @@ a,
    ===================================================================== */
 
 @media (max-width: 640px) {
-  /* Once scrolled, the header collapses into a single slim row. */
+  /* Perf: an opaque, un-blurred header. `backdrop-filter` repaints every frame
+     while scrolling and is the biggest source of mobile scroll jank. */
+  .header {
+    background: var(--surface);
+    backdrop-filter: none;
+  }
+
+  /* Once scrolled, collapse the nav row (animated) and tighten the padding. */
   .header--condensed .header-inner {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 8px;
+    row-gap: 0;
     padding-top: 7px;
     padding-bottom: 7px;
   }
@@ -2348,35 +2372,11 @@ a,
     display: none;
   }
 
-  .header--condensed .brand {
-    gap: 0;
-  }
-
   .header--condensed .nav {
-    order: 0;
-    flex: 1 1 auto;
-    flex-basis: auto;
-    width: auto;
-    min-width: 0;
-    margin: 0 2px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .header--condensed .nav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .header--condensed .nav-link {
-    padding: 6px 9px;
-    font-size: 0.68rem;
-  }
-
-  .header--condensed .header-right {
-    margin-left: 0;
-    width: auto;
-    flex-wrap: nowrap;
-    gap: 6px;
+    max-height: 0;
+    margin-top: 0;
+    opacity: 0;
+    overflow: hidden;
   }
 
   .header--condensed .btn,
@@ -2399,9 +2399,8 @@ a,
     padding-right: max(14px, env(safe-area-inset-right));
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
     padding-left: max(14px, env(safe-area-inset-left));
-    background: var(--header-bg);
+    background: var(--surface);
     border-bottom: 1px solid var(--border);
-    backdrop-filter: blur(10px);
   }
 
   .search--overlay .search-input-wrap,

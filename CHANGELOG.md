@@ -417,6 +417,22 @@ the charts were fiddly on touch.
 - `styles.css` — the chart toolbar scrolls horizontally on phones with larger
   tap targets; the hint realigns to the left.
 
+### Follow-up (mobile smoothness)
+- Header condensing is now **direction-based** with a deadband (condense while
+  scrolling down past 64px, expand on any upward scroll) instead of an absolute
+  threshold, and the CSS animates the nav row's `max-height` collapse rather than
+  switching `flex-direction` — the instant layout jump was the source of the
+  flicker/glitch.
+- `overflow-anchor: none` on `html/body` stops scroll anchoring from fighting
+  the height change; `backdrop-filter` is dropped on phones (it repainted every
+  scroll frame) in favour of an opaque header.
+- **No more sideways page movement:** `overflow-x: clip` +
+  `overscroll-behavior-x: none` on `html/body`, and the chart uses
+  `touch-action: pan-y` / `overscroll-behavior: contain`, so panning/pinching the
+  chart can't drag the whole page.
+- On phones the search is always the expanding icon (the full input was the main
+  space hog), and the phone header is two rows instead of three.
+
 ### Verification
 - `npm run build` passes (default demo build). Not machine-verified visually —
   no browser input in this environment — so it is confirmed on a real phone.

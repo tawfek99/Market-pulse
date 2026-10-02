@@ -15,21 +15,34 @@ export default function Header({ page, onNavigate, onSelectTicker, theme, onTogg
   const isNarrow = useMediaQuery("(max-width: 640px)");
   const [condensed, setCondensed] = useState(false);
 
-  // On phones the header collapses to a single slim row once the page is
-  // scrolled, and expands again at the top. Separate thresholds give a little
-  // hysteresis so it doesn't flicker right at the boundary.
+  // On phones the header condenses once the page is scrolled down and expands
+  // again when the user scrolls up. It is direction-based (not tied to an
+  // absolute offset) with a small deadband, so the header's own height change
+  // can't feed back into the scroll position and flicker.
   useEffect(() => {
     if (!isNarrow) {
       setCondensed(false);
       return undefined;
     }
+    let lastY = Math.max(0, window.scrollY);
     let ticking = false;
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
       window.requestAnimationFrame(() => {
-        const y = window.scrollY;
-        setCondensed((prev) => (prev ? y > 12 : y > 44));
+        const y = Math.max(0, window.scrollY);
+        const dy = y - lastY;
+        // Ignore tiny jitter (the mobile URL bar resize fires scroll events).
+        if (Math.abs(dy) > 6) {
+          if (y <= 8) {
+            setCondensed(false);
+          } else if (dy > 0 && y > 64) {
+            setCondensed(true); // scrolling down
+          } else if (dy < 0) {
+            setCondensed(false); // scrolling up reveals the full header
+          }
+          lastY = y;
+        }
         ticking = false;
       });
     };
@@ -73,7 +86,7 @@ export default function Header({ page, onNavigate, onSelectTicker, theme, onTogg
             <span className="live-dot" />
             {IS_DEMO ? "Demo" : "Live"}
           </span>
-          <SearchBar onSelect={onSelectTicker} collapsed={isNarrow && condensed} />
+          <SearchBar onSelect={onSelectTicker} collapsed={isNarrow} />
           <button
             className="btn btn-icon"
             onClick={onToggleTheme}
